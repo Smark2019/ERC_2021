@@ -10,6 +10,11 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from datetime import datetime
 from pynput.keyboard import Listener  #will be listening keyboard
+import pandas as pd
+
+#Below line si for the prediction of Munsell Code:
+RGB_munsell_df = pd.read_table("RGB2munsell.dat", sep="\s+")
+
 
 #This code will take 1 argument , while launching: python ph_forecasting.py -show ==> Recommended for observing what's going on
 # If you do not give any arg. , then it doesn't show any GUI. ==> Recommended for Competetion time
@@ -20,7 +25,7 @@ def keyPressed(key):
     global p_Pressed
     if(key.char == ('p') ):
         p_Pressed = True
-        print("p_Pressed convertod ==> True ")
+        print("p_Pressed converted ==> True ")
 
 listener = Listener(on_press=keyPressed)
 listener.start()
@@ -51,7 +56,7 @@ def image_processor(Image):
     except CvBridgeError as e:
       print(e)
 
-    # image wrapping
+    # image wrapping ==> getting perspectived frame
     img_wrapped = warpImg(img_cv2,valTrackbars(),1000,800) 
     # image_bgr = cv2.imread('/home/salih/Desktop/Mars.jpg', cv2.IMREAD_COLOR)
 
@@ -95,6 +100,9 @@ def image_processor(Image):
       
     # Using cv2.putText() method
     image = cv2.putText(img_cv2, 'Predicted pH: '+str(predicted_pH), org, font, 
+                      fontScale, color, thickness, cv2.LINE_AA)
+    #Munsel code printing onto Image:
+    image = cv2.putText(img_cv2, 'Munsell Color Code'+str(predictMunsellCode(img_wrapped)), (250,450), font, 
                       fontScale, color, thickness, cv2.LINE_AA)
     img_drawn = drawPoints(image,valTrackbars())
     if(len(sys.argv) > 1 and sys.argv[1] in ['-show']):
@@ -171,7 +179,21 @@ def drawPoints(img, points):
         cv2.circle(img, (int(points[x][0]), int(points[x][1])), 15, (0, 0, 255), cv2.FILLED)
     return img
 
+def predictMunsellCode(frame):
+  RGB_df = RGB_munsell_df[['R', 'G', 'B']]
+  b_frame = frame[:, :, :1]
+  g_frame = frame[:, :, 1:2]
+  r_frame = frame[:, :, 2:]
+  avg_pixel_vector = np.array([np.mean(r_frame), np.mean(g_frame), np.mean(b_frame)])
+  RGB_df = RGB_df - avg_pixel_vector
+  RGB_df = RGB_df ** 2
+  RGB_df['error'] = np.sqrt(np.abs(RGB_df['R'] + RGB_df['G'] + RGB_df['B']))
+  min_error_index = RGB_df[['error']].idxmin()
+  print(RGB_munsell_df.loc[min_error_index, :])
+  return(RGB_munsell_df.loc[min_error_index, :][["H","V","C"]].values[0])
 
+  
+  
 
 def main():
   rospy.init_node('marsyard_pH_forecasting', anonymous=True)
